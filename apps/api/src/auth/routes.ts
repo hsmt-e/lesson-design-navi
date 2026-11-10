@@ -3,11 +3,11 @@ import { loginSchema, registerSchema } from "@lesson/shared";
 import type { FastifyInstance } from "fastify";
 import { sessionCookieClearOptions, sessionCookieOptions } from "./cookie.js";
 import type { PasswordService } from "./password-service.js";
+import { registerProtectedRoutes, type RequireAuth } from "./require-auth.js";
 import {
   SESSION_COOKIE_NAME,
   createSession,
   destroySession,
-  validateSession,
   type SessionStore,
 } from "./session.js";
 import type { UserRecord, UserStore } from "./user-store.js";
@@ -26,7 +26,11 @@ export type AuthLimits = {
   globalLogin: Limit; // IP を問わない全体の上限
   globalRegister: Limit; // IP を問わない全体の上限
 };
-export type AuthRoutesConfig = { isProduction: boolean; limits: AuthLimits };
+export type AuthRoutesConfig = {
+  isProduction: boolean;
+  limits: AuthLimits;
+  requireAuth: RequireAuth;
+};
 
 export const DEFAULT_AUTH_LIMITS: AuthLimits = {
   login: { max: 10, timeWindow: 15 * 60 * 1000 },
@@ -149,6 +153,7 @@ export async function registerAuthRoutes(
     },
   );
 
+  // ログアウトは、認証なし(Cookie が無くても 204)
   app.post("/auth/logout", async (request, reply) => {
     const token = request.cookies[SESSION_COOKIE_NAME];
     if (token) await destroySession(deps.sessionStore, token);
@@ -159,14 +164,10 @@ export async function registerAuthRoutes(
     return reply.code(204).send();
   });
 
-  // GET は、状態を変えない(読むだけ)
-  app.get("/auth/me", async (request, reply) => {
-    const token = request.cookies[SESSION_COOKIE_NAME];
-    if (!token) return reply.code(401).send({ error: "unauthenticated" });
-    const session = await validateSession(deps.sessionStore, token);
-    if (!session) return reply.code(401).send({ error: "unauthenticated" });
-    const user = await deps.userStore.findById(session.userId);
-    if (!user) return reply.code(401).send({ error: "unauthenticated" });
-    return reply.send({ user: publicUser(user) });
+  // 認証が要るルートは、ここにまとめる(フックを1回だけ付ける)。GET は、状態を変えない(読むだけ)
+  await registerProtectedRoutes(app, config.requireAuth, (scope) => {
+    scope.get("/auth/me", async (request) => {
+      return { user: request.user };
+    });
   });
 }
