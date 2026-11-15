@@ -17,6 +17,8 @@ erDiagram
     string id PK
     string email UK
     string passwordHash
+    boolean isDemo "使い捨てデモ(9-6)"
+    datetime expiresAt "デモの期限(任意)"
   }
   Session {
     string id PK
@@ -32,13 +34,18 @@ erDiagram
     string userId FK
     string sourceText
     enum schoolLevel
-    enum status
+    enum status "DRAFT / CONFIRMED / GENERATING"
+    string studentContext "生徒の実情(任意)"
+    enum device "未選択は null"
+    string deviceNote "端末がその他のとき(任意)"
+    string advancedTask "発展課題(AI出力・先生が直せる)"
+    string minimumLine "最低ライン(AI出力・先生が直せる)"
     datetime expiresAt
   }
   Activity {
     string id PK
     string lessonId FK
-    int position
+    int position "lessonId との組で一意"
     json features
     enum method
     string ruleId
@@ -49,6 +56,7 @@ erDiagram
     string lessonId FK
     string activityId FK
     enum kind
+    boolean resolved "確認済み(既定は未確認)"
   }
   Suggestion {
     string id PK
@@ -68,6 +76,6 @@ erDiagram
   UsageLog {
     string id PK
     string userId FK
-    date date
+    date date "日本時間の日付。userId との組で一意"
   }
 ```

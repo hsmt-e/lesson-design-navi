@@ -37,6 +37,16 @@ enum SchoolLevel {
 enum LessonStatus {
   DRAFT
   CONFIRMED
+  GENERATING
+}
+
+enum Device {
+  ONE_PER_STUDENT_SCHOOL
+  ONE_PER_STUDENT_PERSONAL
+  PHONE_ONLY
+  ONE_PER_GROUP
+  NO_DEVICE
+  OTHER
 }
 
 enum Method {
@@ -79,10 +89,12 @@ enum CheckResult {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   passwordHash String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
+  isDemo       Boolean   @default(false)
+  expiresAt    DateTime?
 
   sessions  Session[]
   profile   ClassroomProfile?
@@ -129,6 +141,11 @@ model Lesson {
   focusPerspectives Perspective[]
   durationMin       Int           @default(50)
   practiceSettings  Json          @default("{}")
+  studentContext    String?
+  device            Device?
+  deviceNote        String?
+  advancedTask      String?
+  minimumLine       String?
   status            LessonStatus  @default(DRAFT)
   expiresAt         DateTime
   createdAt         DateTime      @default(now())
@@ -163,7 +180,7 @@ model Activity {
   issues Issue[]
   checks Check[]
 
-  @@index([lessonId])
+  @@unique([lessonId, position])
 }
 
 model Issue {
@@ -172,6 +189,7 @@ model Issue {
   activityId String?
   kind       IssueKind
   message    String
+  resolved   Boolean   @default(false)
 
   lesson   Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   activity Activity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
@@ -220,6 +238,7 @@ model Snapshot {
 model UsageLog {
   id               String   @id @default(cuid())
   userId           String
+  /// 日本時間の日付。時刻なしで保存し、UTC 0時の Date で渡す(decisions.md の 2-12)
   date             DateTime @db.Date
   calls            Int      @default(0)
   inputTokens      Int      @default(0)
