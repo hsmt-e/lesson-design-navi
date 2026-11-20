@@ -96,10 +96,13 @@ model User {
   isDemo       Boolean   @default(false)
   expiresAt    DateTime?
 
-  sessions  Session[]
-  profile   ClassroomProfile?
-  lessons   Lesson[]
-  usageLogs UsageLog[]
+  sessions        Session[]
+  profile         ClassroomProfile?
+  lessons         Lesson[]
+  usageLogs       UsageLog[]
+  /// 利用条件に同意した日時と版(2-15で使う)
+  termsAcceptedAt DateTime?
+  termsVersion    String?
 }
 
 model Session {
@@ -124,7 +127,8 @@ model ClassroomProfile {
   answerHeightMedium Int         @default(45)
   answerHeightLarge  Int         @default(80)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  presentation Presentation @default(BOARD_ONLY)
 }
 
 model Lesson {
@@ -151,11 +155,13 @@ model Lesson {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  activities  Activity[]
-  issues      Issue[]
-  suggestions Suggestion[]
-  snapshots   Snapshot[]
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities   Activity[]
+  issues       Issue[]
+  suggestions  Suggestion[]
+  snapshots    Snapshot[]
+  lessonStyle  LessonStyle  @default(HANDOUT)
+  presentation Presentation @default(BOARD_ONLY)
 
   @@index([userId])
   @@index([expiresAt])
@@ -176,9 +182,11 @@ model Activity {
   hasPresentation Boolean    @default(false)
   editedByTeacher Boolean    @default(false)
 
-  lesson Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  issues Issue[]
-  checks Check[]
+  lesson     Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  issues     Issue[]
+  checks     Check[]
+  /// 板書する要点。AIの出力を保存し、先生が直せる欄
+  boardPoint String?
 
   @@unique([lessonId, position])
 }
@@ -250,4 +258,9 @@ model UsageLog {
 
   @@unique([userId, date])
   @@index([userId])
+}
+
+enum Presentation {
+  BOARD_ONLY
+  WITH_PROJECTION
 }
