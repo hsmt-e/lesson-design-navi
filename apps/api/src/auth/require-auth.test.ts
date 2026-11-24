@@ -62,6 +62,8 @@ async function seedLogin(
   const created = await users.store.create({
     email: "a@example.com",
     passwordHash: "secret-hash",
+    termsAcceptedAt: new Date(),
+    termsVersion: "v-test",
   });
   if (!created.ok) throw new Error("seed failed");
   const { token } = await createSession(sessions.store, created.user.id, now);

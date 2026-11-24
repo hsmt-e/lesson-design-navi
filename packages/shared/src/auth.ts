@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PASSWORD_MAX_LENGTH, passwordSchema } from "./password.js";
+import { termsConsentShape } from "./terms.js";
 
 export const EMAIL_MAX_LENGTH = 254;
 
@@ -14,6 +15,7 @@ export const emailSchema = z
 export const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
+  ...termsConsentShape,
 });
 
 // ログインでは、最小長を求めない(規則を変える前に作ったアカウントでも入れるように)。最大長だけ守る

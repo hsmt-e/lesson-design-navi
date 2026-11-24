@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emailSchema, loginSchema, registerSchema } from "./auth.js";
+import { TERMS_VERSION } from "./terms.js";
 
 // 254文字ちょうどのメール(ローカル部64 + @ + 63 + . + 63 + . + 61)
 const email254 = `${"a".repeat(64)}@${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(61)}`;
@@ -23,14 +24,18 @@ describe("emailSchema", () => {
   });
 });
 
+const terms = { termsAccepted: true, termsVersion: TERMS_VERSION };
+
 describe("registerSchema", () => {
   it("パスワードの規則(12〜128文字)が効く", () => {
     const email = "a@example.com";
     expect(
-      registerSchema.safeParse({ email, password: "a".repeat(11) }).success,
+      registerSchema.safeParse({ email, ...terms, password: "a".repeat(11) })
+        .success,
     ).toBe(false);
     expect(
-      registerSchema.safeParse({ email, password: "a".repeat(12) }).success,
+      registerSchema.safeParse({ email, ...terms, password: "a".repeat(12) })
+        .success,
     ).toBe(true);
   });
 });

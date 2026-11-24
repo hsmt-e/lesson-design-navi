@@ -12,10 +12,12 @@ import {
 import { DEFAULT_AUTH_LIMITS, type AuthLimits } from "./routes.js";
 import { hashSessionToken, type SessionStore } from "./session.js";
 import type { UserStore } from "./user-store.js";
+import { TERMS_VERSION } from "@lesson/shared";
 
 const ORIGIN = "https://example.com";
 const VALID_PW = "correct-horse-battery";
 const EMAIL = "test@example.com";
+const TERMS = { termsAccepted: true, termsVersion: TERMS_VERSION };
 
 // 本物の argon2 を使う(1回だけ作り、各テストで使い回す)
 const passwords = await createPasswordService();
@@ -120,6 +122,7 @@ describe("POST /auth/register", () => {
   it("登録でき、メールは小文字にそろい、ログインした状態になる", async () => {
     const { app, users, sessions } = await makeApp();
     const res = await post(app, "/auth/register", {
+      ...TERMS,
       email: " Test@Example.com ",
       password: VALID_PW,
     });
@@ -145,6 +148,7 @@ describe("POST /auth/register", () => {
   it("本番では Cookie に Secure が付く", async () => {
     const { app } = await makeApp({ isProduction: true });
     const res = await post(app, "/auth/register", {
+      ...TERMS,
       email: EMAIL,
       password: VALID_PW,
     });
@@ -161,10 +165,15 @@ describe("POST /auth/register", () => {
       },
     };
     const { app } = await makeApp({ passwords: counting });
-    await post(app, "/auth/register", { email: EMAIL, password: VALID_PW });
+    await post(app, "/auth/register", {
+      ...TERMS,
+      email: EMAIL,
+      password: VALID_PW,
+    });
     expect(hashCalls).toBe(1);
 
     const res = await post(app, "/auth/register", {
+      ...TERMS,
       email: "TEST@example.com",
       password: VALID_PW,
     });
@@ -180,10 +189,12 @@ describe("POST /auth/register", () => {
   it("入力が不正なら 400", async () => {
     const { app, users } = await makeApp();
     const shortPw = await post(app, "/auth/register", {
+      ...TERMS,
       email: EMAIL,
       password: "short",
     });
     const badEmail = await post(app, "/auth/register", {
+      ...TERMS,
       email: "nope",
       password: VALID_PW,
     });
@@ -210,7 +221,11 @@ describe("POST /auth/register", () => {
 describe("POST /auth/login", () => {
   it("ログインでき、メールの大文字小文字は問わない", async () => {
     const { app, sessions } = await makeApp();
-    await post(app, "/auth/register", { email: EMAIL, password: VALID_PW });
+    await post(app, "/auth/register", {
+      ...TERMS,
+      email: EMAIL,
+      password: VALID_PW,
+    });
     const res = await post(app, "/auth/login", {
       email: "TEST@EXAMPLE.COM",
       password: VALID_PW,
@@ -224,7 +239,11 @@ describe("POST /auth/login", () => {
 
   it("パスワード違いと、存在しないメールは、同じ 401 と同じ文言", async () => {
     const { app } = await makeApp();
-    await post(app, "/auth/register", { email: EMAIL, password: VALID_PW });
+    await post(app, "/auth/register", {
+      ...TERMS,
+      email: EMAIL,
+      password: VALID_PW,
+    });
     const wrongPw = await post(app, "/auth/login", {
       email: EMAIL,
       password: "wrong-horse-battery",
@@ -253,7 +272,11 @@ describe("POST /auth/login", () => {
       },
     };
     const { app } = await makeApp({ passwords: spy });
-    await post(app, "/auth/register", { email: EMAIL, password: VALID_PW });
+    await post(app, "/auth/register", {
+      ...TERMS,
+      email: EMAIL,
+      password: VALID_PW,
+    });
     await post(app, "/auth/login", {
       email: "nobody@example.com",
       password: VALID_PW,
@@ -276,6 +299,7 @@ describe("POST /auth/login", () => {
   it("このブラウザの古いセッションは消え、新しいセッションができる", async () => {
     const { app, sessions } = await makeApp();
     const reg = await post(app, "/auth/register", {
+      ...TERMS,
       email: EMAIL,
       password: VALID_PW,
     });
@@ -295,6 +319,7 @@ describe("POST /auth/login", () => {
   it("別の端末のセッションは残る(複数端末を許す)", async () => {
     const { app, sessions } = await makeApp();
     const reg = await post(app, "/auth/register", {
+      ...TERMS,
       email: EMAIL,
       password: VALID_PW,
     });
@@ -317,6 +342,7 @@ describe("POST /auth/login", () => {
     };
     const { app } = await makeApp({ sessionStore: wrapped });
     const reg = await post(app, "/auth/register", {
+      ...TERMS,
       email: EMAIL,
       password: VALID_PW,
     });
@@ -338,6 +364,7 @@ describe("POST /auth/logout", () => {
   it("セッションと Cookie を消し、以後 /auth/me は 401", async () => {
     const { app, sessions } = await makeApp();
     const reg = await post(app, "/auth/register", {
+      ...TERMS,
       email: EMAIL,
       password: VALID_PW,
     });
@@ -364,18 +391,23 @@ describe("GET /auth/me", () => {
   it("ログイン中は、ユーザーを返す(パスワードのハッシュは含めない)", async () => {
     const { app } = await makeApp();
     const reg = await post(app, "/auth/register", {
+      ...TERMS,
       email: EMAIL,
       password: VALID_PW,
     });
     const res = await getMe(app, sessionToken(reg.headers));
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ user: { id: "user-1", email: EMAIL } });
+    expect(res.json()).toEqual({
+      user: { id: "user-1", email: EMAIL },
+      needsTermsAgreement: false,
+    });
     expect(res.body).not.toContain("passwordHash");
   });
 
   it("GET は状態を変えない(セッションもユーザーも、そのまま)", async () => {
     const { app, users, sessions } = await makeApp();
     const reg = await post(app, "/auth/register", {
+      ...TERMS,
       email: EMAIL,
       password: VALID_PW,
     });
@@ -397,6 +429,7 @@ describe("GET /auth/me", () => {
     expect([none.statusCode, garbage.statusCode]).toEqual([401, 401]);
 
     const reg = await post(app, "/auth/register", {
+      ...TERMS,
       email: EMAIL,
       password: VALID_PW,
     });
@@ -440,6 +473,7 @@ describe("DB・内部の失敗は、握りつぶさず 500(本文は汎用)", ()
       id: "u1",
       email: EMAIL,
       passwordHash: "not-a-hash",
+      termsVersion: null,
     });
     const res = await post(app, "/auth/login", {
       email: EMAIL,
@@ -476,6 +510,7 @@ describe("回数制限と負荷", () => {
     const statuses: number[] = [];
     for (const email of ["a@example.com", "b@example.com", "c@example.com"]) {
       const res = await post(app, "/auth/register", {
+        ...TERMS,
         email,
         password: VALID_PW,
       });
@@ -553,7 +588,7 @@ describe("回数制限と負荷", () => {
       const res = await post(
         app,
         "/auth/register",
-        { email, password: VALID_PW },
+        { ...TERMS, email, password: VALID_PW },
         { "x-forwarded-for": `10.0.0.${i + 1}` },
       );
       statuses.push(res.statusCode);
@@ -567,10 +602,12 @@ describe("回数制限と負荷", () => {
       limits: limits({ globalRegister: { max: 1, timeWindow: 60_000 } }),
     });
     const bad = await post(app, "/auth/register", {
+      ...TERMS,
       email: "nope",
       password: VALID_PW,
     });
     const ok = await post(app, "/auth/register", {
+      ...TERMS,
       email: EMAIL,
       password: VALID_PW,
     });
@@ -602,11 +639,13 @@ describe("回数制限と負荷", () => {
     const { app } = await makeApp({ passwords: slow });
 
     const first = post(app, "/auth/register", {
+      ...TERMS,
       email: "a@example.com",
       password: VALID_PW,
     });
     await startedPromise;
     const second = await post(app, "/auth/register", {
+      ...TERMS,
       email: "b@example.com",
       password: VALID_PW,
     });
@@ -629,6 +668,7 @@ describe("ログ", () => {
       },
     });
     const reg = await post(app, "/auth/register", {
+      ...TERMS,
       email: EMAIL,
       password: VALID_PW,
     });
@@ -639,5 +679,211 @@ describe("ログ", () => {
     expect(logs).toContain("request completed");
     expect(logs).not.toContain(VALID_PW);
     expect(logs).not.toContain(token);
+  });
+});
+
+// ---- 2-15: 同意の記録 ----
+
+async function registerToken(app: App, email: string): Promise<string> {
+  const reg = await post(app, "/auth/register", {
+    email,
+    password: VALID_PW,
+    ...TERMS,
+  });
+  return sessionToken(reg.headers);
+}
+
+// 偽の窓口の中の、同意の版を書き換える(同意の記録が空の既存アカウントや、古い版を作るため)
+function setTermsVersion(
+  users: ReturnType<typeof createFakeUserStore>,
+  id: string,
+  termsVersion: string | null,
+) {
+  const user = users.users.get(id);
+  if (!user) throw new Error(`ユーザーがいない: ${id}`);
+  users.users.set(id, { ...user, termsVersion });
+}
+
+describe("POST /auth/register と同意の記録", () => {
+  it("同意の項目が無いと、400 で、ユーザーは作られない", async () => {
+    const { app, users } = await makeApp();
+    const res = await post(app, "/auth/register", {
+      email: EMAIL,
+      password: VALID_PW,
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "invalid_input" });
+    expect(users.users.size).toBe(0);
+  });
+
+  it("同意が false だと、400 で、ユーザーは作られない", async () => {
+    const { app, users } = await makeApp();
+    const res = await post(app, "/auth/register", {
+      email: EMAIL,
+      password: VALID_PW,
+      ...TERMS,
+      termsAccepted: false,
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "invalid_input" });
+    expect(users.users.size).toBe(0);
+  });
+
+  it("版が古いと、別のコード(terms_version_mismatch)で 400。ユーザーは作られない", async () => {
+    const { app, users } = await makeApp();
+    const res = await post(app, "/auth/register", {
+      email: EMAIL,
+      password: VALID_PW,
+      ...TERMS,
+      termsVersion: "1999-01-01",
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "terms_version_mismatch" });
+    expect(users.users.size).toBe(0);
+  });
+
+  it("同意ありで登録すると、現在の版が保存される", async () => {
+    const { app, users } = await makeApp();
+    const res = await post(app, "/auth/register", {
+      email: EMAIL,
+      password: VALID_PW,
+      ...TERMS,
+    });
+    expect(res.statusCode).toBe(201);
+    expect(users.users.get("user-1")?.termsVersion).toBe(TERMS_VERSION);
+  });
+});
+
+describe("GET /auth/me の needsTermsAgreement", () => {
+  it("同意して登録した直後は、false", async () => {
+    const { app } = await makeApp();
+    const token = await registerToken(app, EMAIL);
+    const res = await getMe(app, token);
+    expect(res.json()).toMatchObject({ needsTermsAgreement: false });
+  });
+
+  it("同意の記録が空の既存アカウントは、true", async () => {
+    const { app, users } = await makeApp();
+    const token = await registerToken(app, EMAIL);
+    setTermsVersion(users, "user-1", null);
+    const res = await getMe(app, token);
+    expect(res.json()).toMatchObject({ needsTermsAgreement: true });
+  });
+
+  it("古い版に同意したアカウントは、true", async () => {
+    const { app, users } = await makeApp();
+    const token = await registerToken(app, EMAIL);
+    setTermsVersion(users, "user-1", "1999-01-01");
+    const res = await getMe(app, token);
+    expect(res.json()).toMatchObject({ needsTermsAgreement: true });
+  });
+
+  it("取得しても、保存された内容は変わらない", async () => {
+    const { app, users } = await makeApp();
+    const token = await registerToken(app, EMAIL);
+    const before = { ...users.users.get("user-1") };
+    await getMe(app, token);
+    expect(users.users.get("user-1")).toEqual(before);
+  });
+});
+
+describe("POST /auth/terms", () => {
+  it("再同意が要るアカウントが同意すると、現在の版が記録され、needsTermsAgreement が false になる", async () => {
+    const { app, users } = await makeApp();
+    const token = await registerToken(app, EMAIL);
+    setTermsVersion(users, "user-1", null);
+    expect((await getMe(app, token)).json()).toMatchObject({
+      needsTermsAgreement: true,
+    });
+
+    const res = await post(app, "/auth/terms", TERMS, {
+      cookie: `session=${token}`,
+    });
+    expect(res.statusCode).toBe(204);
+    expect(users.users.get("user-1")?.termsVersion).toBe(TERMS_VERSION);
+    expect((await getMe(app, token)).json()).toMatchObject({
+      needsTermsAgreement: false,
+    });
+  });
+
+  it("ほかのユーザーの行は、変わらない", async () => {
+    const { app, users } = await makeApp();
+    const tokenA = await registerToken(app, "a@example.com");
+    await registerToken(app, "b@example.com");
+    setTermsVersion(users, "user-1", null);
+    setTermsVersion(users, "user-2", null);
+
+    const res = await post(app, "/auth/terms", TERMS, {
+      cookie: `session=${tokenA}`,
+    });
+    expect(res.statusCode).toBe(204);
+    expect(users.users.get("user-1")?.termsVersion).toBe(TERMS_VERSION);
+    expect(users.users.get("user-2")?.termsVersion).toBeNull();
+  });
+
+  it("本文に userId を入れても、使われない", async () => {
+    const { app, users } = await makeApp();
+    const tokenA = await registerToken(app, "a@example.com");
+    await registerToken(app, "b@example.com");
+    setTermsVersion(users, "user-1", null);
+    setTermsVersion(users, "user-2", null);
+
+    const res = await post(
+      app,
+      "/auth/terms",
+      { ...TERMS, userId: "user-2" },
+      { cookie: `session=${tokenA}` },
+    );
+    expect(res.statusCode).toBe(204);
+    expect(users.users.get("user-1")?.termsVersion).toBe(TERMS_VERSION);
+    expect(users.users.get("user-2")?.termsVersion).toBeNull();
+  });
+
+  it("版が古いと、別のコード(terms_version_mismatch)で 400。何も変わらない", async () => {
+    const { app, users } = await makeApp();
+    const token = await registerToken(app, EMAIL);
+    setTermsVersion(users, "user-1", null);
+    const res = await post(
+      app,
+      "/auth/terms",
+      { ...TERMS, termsVersion: "1999-01-01" },
+      { cookie: `session=${token}` },
+    );
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "terms_version_mismatch" });
+    expect(users.users.get("user-1")?.termsVersion).toBeNull();
+  });
+
+  it("形が違う(同意が false)と、400(invalid_input)。何も変わらない", async () => {
+    const { app, users } = await makeApp();
+    const token = await registerToken(app, EMAIL);
+    setTermsVersion(users, "user-1", null);
+    const res = await post(
+      app,
+      "/auth/terms",
+      { ...TERMS, termsAccepted: false },
+      { cookie: `session=${token}` },
+    );
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "invalid_input" });
+    expect(users.users.get("user-1")?.termsVersion).toBeNull();
+  });
+
+  it("未ログインは 401", async () => {
+    const { app } = await makeApp();
+    const res = await post(app, "/auth/terms", TERMS);
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("別のサイトからのリクエストは 403。何も変わらない", async () => {
+    const { app, users } = await makeApp();
+    const token = await registerToken(app, EMAIL);
+    setTermsVersion(users, "user-1", null);
+    const res = await post(app, "/auth/terms", TERMS, {
+      cookie: `session=${token}`,
+      origin: "https://evil.example",
+    });
+    expect(res.statusCode).toBe(403);
+    expect(users.users.get("user-1")?.termsVersion).toBeNull();
   });
 });

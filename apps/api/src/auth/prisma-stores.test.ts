@@ -17,7 +17,12 @@ describe("isUniqueViolation", () => {
 });
 
 describe("createPrismaStores の userStore.create", () => {
-  const input = { email: "a@example.com", passwordHash: "h" };
+  const input = {
+    email: "a@example.com",
+    passwordHash: "h",
+    termsAcceptedAt: new Date(),
+    termsVersion: "v-test",
+  };
 
   it("成功したら、ユーザーを返す", async () => {
     const user = { id: "u1", email: input.email, passwordHash: "h" };
@@ -43,5 +48,48 @@ describe("createPrismaStores の userStore.create", () => {
       fakePrisma(() => Promise.reject(new Error("db down"))),
     );
     await expect(userStore.create(input)).rejects.toThrow("db down");
+  });
+});
+
+function fakePrismaUpdate(
+  updateMany: (args: unknown) => Promise<{ count: number }>,
+) {
+  return { user: { updateMany } } as unknown as PrismaClient;
+}
+
+describe("createPrismaStores の userStore.recordTermsAgreement", () => {
+  const at = new Date("2026-11-21T00:00:00Z");
+
+  it("渡された userId の行だけを、版と日時で更新する", async () => {
+    const calls: unknown[] = [];
+    const { userStore } = createPrismaStores(
+      fakePrismaUpdate((args) => {
+        calls.push(args);
+        return Promise.resolve({ count: 1 });
+      }),
+    );
+    expect(await userStore.recordTermsAgreement("u1", "v1", at)).toBe(true);
+    expect(calls).toEqual([
+      {
+        where: { id: "u1" },
+        data: { termsAcceptedAt: at, termsVersion: "v1" },
+      },
+    ]);
+  });
+
+  it("更新が0件(行が無い)なら、false", async () => {
+    const { userStore } = createPrismaStores(
+      fakePrismaUpdate(() => Promise.resolve({ count: 0 })),
+    );
+    expect(await userStore.recordTermsAgreement("u1", "v1", at)).toBe(false);
+  });
+
+  it("エラーは、握りつぶさず投げる", async () => {
+    const { userStore } = createPrismaStores(
+      fakePrismaUpdate(() => Promise.reject(new Error("db down"))),
+    );
+    await expect(
+      userStore.recordTermsAgreement("u1", "v1", at),
+    ).rejects.toThrow("db down");
   });
 });

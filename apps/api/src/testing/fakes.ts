@@ -15,10 +15,16 @@ export function createFakeUserStore() {
         [...users.values()].find((u) => u.email === email) ?? null,
       );
     },
+    async recordTermsAgreement(userId: string, termsVersion: string) {
+      const user = users.get(userId);
+      if (!user) return false;
+      users.set(userId, { ...user, termsVersion });
+      return true;
+    },
     findById(id) {
       return Promise.resolve(users.get(id) ?? null);
     },
-    create({ email, passwordHash }) {
+    create({ email, passwordHash, termsVersion }) {
       if ([...users.values()].some((u) => u.email === email)) {
         return Promise.resolve<CreateUserResult>({
           ok: false,
@@ -26,7 +32,12 @@ export function createFakeUserStore() {
         });
       }
       seq += 1;
-      const user: UserRecord = { id: `user-${seq}`, email, passwordHash };
+      const user: UserRecord = {
+        id: `user-${seq}`,
+        email,
+        passwordHash,
+        termsVersion,
+      };
       users.set(user.id, user);
       return Promise.resolve<CreateUserResult>({ ok: true, user });
     },
