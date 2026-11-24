@@ -1,4 +1,9 @@
-export type UserRecord = { id: string; email: string; passwordHash: string };
+export type UserRecord = {
+  id: string;
+  email: string;
+  passwordHash: string;
+  termsVersion: string | null;
+};
 
 export type CreateUserResult =
   { ok: true; user: UserRecord } | { ok: false; reason: "duplicate" };
@@ -11,5 +16,14 @@ export interface UserStore {
   create(input: {
     email: string;
     passwordHash: string;
+    termsAcceptedAt: Date;
+    termsVersion: string;
   }): Promise<CreateUserResult>;
+
+  /** 同意を記録する。userId は、ログイン中のユーザーのものを渡す(リクエストの本文から取らない)。更新できたか(行があったか)を返す。 */
+  recordTermsAgreement(
+    userId: string,
+    termsVersion: string,
+    at: Date,
+  ): Promise<boolean>;
 }

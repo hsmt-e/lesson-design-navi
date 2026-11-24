@@ -1,5 +1,11 @@
 import rateLimit from "@fastify/rate-limit";
-import { loginSchema, registerSchema } from "@lesson/shared";
+import {
+  loginSchema,
+  registerSchema,
+  TERMS_VERSION,
+  needsTermsAgreement,
+  termsAgreementSchema,
+} from "@lesson/shared";
 import type { FastifyInstance } from "fastify";
 import { sessionCookieClearOptions, sessionCookieOptions } from "./cookie.js";
 import type { PasswordService } from "./password-service.js";
@@ -87,6 +93,8 @@ export async function registerAuthRoutes(
       if (!parsed.success)
         return reply.code(400).send({ error: "invalid_input" });
       // 入力が正しいものだけ、全体の上限に数える(重い処理の前で判定する)
+      if (parsed.data.termsVersion !== TERMS_VERSION)
+        return reply.code(400).send({ error: "terms_version_mismatch" });
       if (!globalRegister.tryTake())
         return reply.code(429).send(RATE_LIMITED_BODY);
       const { email, password } = parsed.data;
@@ -98,6 +106,8 @@ export async function registerAuthRoutes(
       const result = await deps.userStore.create({
         email,
         passwordHash: await deps.passwords.hash(password),
+        termsAcceptedAt: new Date(),
+        termsVersion: TERMS_VERSION,
       });
       // 同時に同じメールが登録された場合(DB の unique で判定)
       if (!result.ok) return reply.code(409).send(EMAIL_TAKEN);
@@ -167,7 +177,31 @@ export async function registerAuthRoutes(
   // 認証が要るルートは、ここにまとめる(フックを1回だけ付ける)。GET は、状態を変えない(読むだけ)
   await registerProtectedRoutes(app, config.requireAuth, (scope) => {
     scope.get("/auth/me", async (request) => {
-      return { user: request.user };
+      const record = request.user
+        ? await deps.userStore.findById(request.user.id)
+        : null;
+      return {
+        user: request.user,
+        needsTermsAgreement: needsTermsAgreement(record?.termsVersion),
+      };
+    });
+
+    // 状態を変える(POST)。Origin チェックの対象。ログイン中のユーザー自身の行だけを変える。
+    scope.post("/auth/terms", async (request, reply) => {
+      if (!request.user)
+        return reply.code(401).send({ error: "unauthenticated" });
+      const parsed = termsAgreementSchema.safeParse(request.body);
+      if (!parsed.success)
+        return reply.code(400).send({ error: "invalid_input" });
+      if (parsed.data.termsVersion !== TERMS_VERSION)
+        return reply.code(400).send({ error: "terms_version_mismatch" });
+      const recorded = await deps.userStore.recordTermsAgreement(
+        request.user.id,
+        TERMS_VERSION,
+        new Date(),
+      );
+      if (!recorded) return reply.code(401).send({ error: "unauthenticated" });
+      return reply.code(204).send();
     });
   });
 }

@@ -2,7 +2,12 @@ import type { PrismaClient } from "../../generated/prisma/client.js";
 import type { SessionStore } from "./session.js";
 import type { UserStore } from "./user-store.js";
 
-const userSelect = { id: true, email: true, passwordHash: true } as const;
+const userSelect = {
+  id: true,
+  email: true,
+  passwordHash: true,
+  termsVersion: true,
+} as const;
 
 // PostgreSQL の unique 違反(Prisma のエラーコード P2002)かどうか
 export function isUniqueViolation(error: unknown): boolean {
@@ -21,6 +26,19 @@ export function createPrismaStores(prisma: PrismaClient): {
   const userStore: UserStore = {
     findByEmail: (email) =>
       prisma.user.findUnique({ where: { email }, select: userSelect }),
+    async recordTermsAgreement(
+      userId: string,
+      termsVersion: string,
+      at: Date,
+    ): Promise<boolean> {
+      // 渡された userId の行だけを変える。更新できた(行があった)かを返す
+      const result = await prisma.user.updateMany({
+        where: { id: userId },
+        data: { termsAcceptedAt: at, termsVersion },
+      });
+      return result.count > 0;
+    },
+
     findById: (id) =>
       prisma.user.findUnique({ where: { id }, select: userSelect }),
     async create(input) {

@@ -12,3 +12,4 @@ export type Lesson = z.infer<typeof LessonSchema>;
 export * from "./password.js";
 
 export * from "./auth.js";
+export * from "./terms.js";
